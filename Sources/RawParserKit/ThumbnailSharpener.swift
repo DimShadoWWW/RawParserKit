@@ -30,7 +30,7 @@ public enum ThumbnailSharpener {
     public nonisolated static func sharpenedPreview(
         from url: URL,
         maxDimension: CGFloat,
-        amount: Float,
+        amount: Float
     ) -> CGImage? {
         guard let rawFilter = CIRAWFilter(imageURL: url) else { return nil }
 

@@ -5,22 +5,22 @@ import PackageDescription
 let package = Package(
     name: "RawParserKit",
     platforms: [
-        .macOS(.v26),
+        .macOS(.v26)
     ],
     products: [
         .library(
             name: "RawParserKit",
-            targets: ["RawParserKit"],
-        ),
+            targets: ["RawParserKit"]
+        )
     ],
     targets: [
         .target(
-            name: "RawParserKit",
+            name: "RawParserKit"
         ),
         .testTarget(
             name: "RawParserKitTests",
-            dependencies: ["RawParserKit"],
-        ),
+            dependencies: ["RawParserKit"]
+        )
     ],
-    swiftLanguageModes: [.v6],
+    swiftLanguageModes: [.v6]
 )

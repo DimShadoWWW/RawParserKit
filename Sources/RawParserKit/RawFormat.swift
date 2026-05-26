@@ -24,7 +24,7 @@ public protocol RawFormat: Sendable {
     nonisolated static func extractThumbnail(
         from url: URL,
         maxDimension: CGFloat,
-        qualityCost: Int,
+        qualityCost: Int
     ) async throws -> CGImage
 
     /// Largest embedded JPEG, optionally downsampled. Returns nil when the format

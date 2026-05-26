@@ -18,12 +18,12 @@ public enum SonyRawFormat: RawFormat {
     public nonisolated static func extractThumbnail(
         from url: URL,
         maxDimension: CGFloat,
-        qualityCost: Int,
+        qualityCost: Int
     ) async throws -> CGImage {
         try await SonyThumbnailExtractor.extractSonyThumbnail(
             from: url,
             maxDimension: maxDimension,
-            qualityCost: qualityCost,
+            qualityCost: qualityCost
         )
     }
 

@@ -19,14 +19,14 @@ public enum SonyThumbnailExtractor {
     public static func extractSonyThumbnail(
         from url: URL,
         maxDimension: CGFloat,
-        qualityCost: Int = 4,
+        qualityCost: Int = 4
     ) async throws -> CGImage {
         try await CancellableImageIOWork.run(qos: .userInitiated) { token in
             try Self.extractSync(
                 from: url,
                 maxDimension: maxDimension,
                 qualityCost: qualityCost,
-                cancellationToken: token,
+                cancellationToken: token
             )
         }
     }
@@ -37,7 +37,7 @@ public enum SonyThumbnailExtractor {
         from url: URL,
         maxDimension: CGFloat,
         qualityCost: Int,
-        cancellationToken: ImageIOCancellationToken,
+        cancellationToken: ImageIOCancellationToken
     ) throws -> CGImage {
         try cancellationToken.checkCancellation()
 
@@ -48,7 +48,7 @@ public enum SonyThumbnailExtractor {
         if let embeddedThumbnail = try binaryFallbackThumbnail(
             from: url,
             maxDimension: maxDimension,
-            cancellationToken: cancellationToken,
+            cancellationToken: cancellationToken
         ) {
             try cancellationToken.checkCancellation()
             return try rerender(embeddedThumbnail, qualityCost: qualityCost)
@@ -91,7 +91,7 @@ public enum SonyThumbnailExtractor {
     private nonisolated static func binaryFallbackThumbnail(
         from url: URL,
         maxDimension: CGFloat,
-        cancellationToken: ImageIOCancellationToken,
+        cancellationToken: ImageIOCancellationToken
     ) throws -> CGImage? {
         try cancellationToken.checkCancellation()
 
@@ -136,7 +136,7 @@ public enum SonyThumbnailExtractor {
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue,
+            bitmapInfo: bitmapInfo.rawValue
         ) else {
             throw ThumbnailError.contextCreationFailed
         }

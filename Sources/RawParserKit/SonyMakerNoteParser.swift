@@ -107,7 +107,7 @@ public enum SonyMakerNoteParser {
                 return .init(
                     value: "\(result.width) \(result.height) \(result.x) \(result.y)",
                     trace: trace,
-                    failure: nil,
+                    failure: nil
                 )
             }
             trace.append("ERROR: fast-path focus parse failed: \(parsed.failure ?? "unknown parser failure")")
@@ -138,7 +138,7 @@ public enum SonyMakerNoteParser {
         return .init(
             value: "\(result.width) \(result.height) \(result.x) \(result.y)",
             trace: trace,
-            failure: nil,
+            failure: nil
         )
     }
 
@@ -227,7 +227,7 @@ public enum SonyMakerNoteParser {
     /// Reads raw bytes for an embedded JPEG from the file at the given absolute offset.
     public nonisolated static func readEmbeddedJPEGData(
         at location: EmbeddedJPEGLocations.Location,
-        from url: URL,
+        from url: URL
     ) -> Data? {
         guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? fh.close() }

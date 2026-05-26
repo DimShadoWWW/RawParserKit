@@ -29,7 +29,7 @@ public final class ImageIOCancellationToken: @unchecked Sendable {
 public enum CancellableImageIOWork {
     public nonisolated static func run<Success: Sendable>(
         qos: DispatchQoS.QoSClass,
-        _ operation: @escaping @Sendable (ImageIOCancellationToken) throws -> Success,
+        _ operation: @escaping @Sendable (ImageIOCancellationToken) throws -> Success
     ) async throws -> Success {
         let token = ImageIOCancellationToken()
         let state = WorkState<Success>()
@@ -57,7 +57,7 @@ public enum CancellableImageIOWork {
 
     public nonisolated static func runReturningNilOnCancellation<Success: Sendable>(
         qos: DispatchQoS.QoSClass,
-        _ operation: @escaping @Sendable (ImageIOCancellationToken) throws -> Success?,
+        _ operation: @escaping @Sendable (ImageIOCancellationToken) throws -> Success?
     ) async -> Success? {
         do {
             return try await run(qos: qos, operation)

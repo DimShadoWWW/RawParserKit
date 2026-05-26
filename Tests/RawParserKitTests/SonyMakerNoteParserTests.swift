@@ -33,7 +33,7 @@ private func makeSyntheticARW(
     width: UInt16 = 9504,
     height: UInt16 = 6336,
     x: UInt16 = 4752,
-    y: UInt16 = 3168,
+    y: UInt16 = 3168
 ) throws -> URL {
     // ── offset map ────────────────────────────────────────────────
     // IFD0        starts at 8   (size 18 → next region at 26)
@@ -269,7 +269,7 @@ private func makeSyntheticJPEGData(
     height: Int,
     red: CGFloat,
     green: CGFloat,
-    blue: CGFloat,
+    blue: CGFloat
 ) throws -> [UInt8] {
     let colorSpace = CGColorSpaceCreateDeviceRGB()
     let context = try #require(CGContext(
@@ -279,7 +279,7 @@ private func makeSyntheticJPEGData(
         bitsPerComponent: 8,
         bytesPerRow: 0,
         space: colorSpace,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     ))
     context.setFillColor(CGColor(red: red, green: green, blue: blue, alpha: 1.0))
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
@@ -290,7 +290,7 @@ private func makeSyntheticJPEGData(
         data,
         UTType.jpeg.identifier as CFString,
         1,
-        nil,
+        nil
     ))
     CGImageDestinationAddImage(destination, image, nil)
     try #require(CGImageDestinationFinalize(destination))
@@ -464,7 +464,7 @@ struct SonyEmbeddedJPEGLocatorTests {
 
         let thumbnail = try await SonyThumbnailExtractor.extractSonyThumbnail(
             from: fixture.url,
-            maxDimension: 64,
+            maxDimension: 64
         )
 
         #expect(thumbnail.width == 48)
@@ -478,7 +478,7 @@ struct SonyEmbeddedJPEGLocatorTests {
 
         let extracted = try #require(await JPGSonyARWExtractor.jpgSonyARWExtractor(
             from: fixture.url,
-            fullSize: false,
+            fullSize: false
         ))
 
         #expect(extracted.width == 96)

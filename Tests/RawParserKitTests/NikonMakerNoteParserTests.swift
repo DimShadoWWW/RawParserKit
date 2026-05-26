@@ -31,7 +31,7 @@ private func makeSyntheticNEF(
     height: UInt16 = 5504,
     x: UInt16 = 4128,
     y: UInt16 = 2752,
-    nikonSignature: Bool = true,
+    nikonSignature: Bool = true
 ) throws -> URL {
     let makerNoteOffset = 0x2C
     let innerTIFFOffset = makerNoteOffset + 10 // 0x36

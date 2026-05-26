@@ -17,7 +17,7 @@ import OSLog
 public enum JPGNikonNEFExtractor {
     public static func jpgNikonNEFExtractor(
         from nefURL: URL,
-        fullSize: Bool = false,
+        fullSize: Bool = false
     ) async -> CGImage? {
         let maxThumbnailSize: CGFloat = fullSize ? 8640 : 4320
 
@@ -26,7 +26,7 @@ public enum JPGNikonNEFExtractor {
                 from: nefURL,
                 fullSize: fullSize,
                 maxThumbnailSize: maxThumbnailSize,
-                cancellationToken: token,
+                cancellationToken: token
             )
         }
     }
@@ -35,7 +35,7 @@ public enum JPGNikonNEFExtractor {
         from nefURL: URL,
         fullSize: Bool,
         maxThumbnailSize: CGFloat,
-        cancellationToken: ImageIOCancellationToken,
+        cancellationToken: ImageIOCancellationToken
     ) throws -> CGImage? {
         try cancellationToken.checkCancellation()
 
@@ -54,7 +54,7 @@ public enum JPGNikonNEFExtractor {
             try cancellationToken.checkCancellation()
 
             guard let properties = CGImageSourceCopyPropertiesAtIndex(
-                imageSource, index, nil,
+                imageSource, index, nil
             ) as? [CFString: Any] else { continue }
 
             let hasJFIF = (properties[kCGImagePropertyJFIFDictionary] as? [CFString: Any]) != nil
@@ -99,7 +99,7 @@ public enum JPGNikonNEFExtractor {
             from: nefURL,
             fullSize: fullSize,
             maxSize: maxThumbnailSize,
-            cancellationToken: cancellationToken,
+            cancellationToken: cancellationToken
         )
         if fallback == nil {
             RawParserKitLog.process.warning("JPGNikonNEFExtractor: binary fallback also failed for \(nefURL.lastPathComponent)")
@@ -115,7 +115,7 @@ public enum JPGNikonNEFExtractor {
         from url: URL,
         fullSize: Bool,
         maxSize: CGFloat,
-        cancellationToken: ImageIOCancellationToken,
+        cancellationToken: ImageIOCancellationToken
     ) throws -> CGImage? {
         try cancellationToken.checkCancellation()
 

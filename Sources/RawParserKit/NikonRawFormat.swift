@@ -20,12 +20,12 @@ public enum NikonRawFormat: RawFormat {
     public nonisolated static func extractThumbnail(
         from url: URL,
         maxDimension: CGFloat,
-        qualityCost: Int,
+        qualityCost: Int
     ) async throws -> CGImage {
         try await NikonThumbnailExtractor.extractNikonThumbnail(
             from: url,
             maxDimension: maxDimension,
-            qualityCost: qualityCost,
+            qualityCost: qualityCost
         )
     }
 

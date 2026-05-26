@@ -13,7 +13,7 @@ import OSLog
 public enum JPGSonyARWExtractor {
     public static func jpgSonyARWExtractor(
         from arwURL: URL,
-        fullSize: Bool = false,
+        fullSize: Bool = false
     ) async -> CGImage? {
         let maxThumbnailSize: CGFloat = fullSize ? 8640 : 4320
 
@@ -22,7 +22,7 @@ public enum JPGSonyARWExtractor {
                 from: arwURL,
                 fullSize: fullSize,
                 maxThumbnailSize: maxThumbnailSize,
-                cancellationToken: token,
+                cancellationToken: token
             )
         }
     }
@@ -31,7 +31,7 @@ public enum JPGSonyARWExtractor {
         from arwURL: URL,
         fullSize: Bool,
         maxThumbnailSize: CGFloat,
-        cancellationToken: ImageIOCancellationToken,
+        cancellationToken: ImageIOCancellationToken
     ) throws -> CGImage? {
         try cancellationToken.checkCancellation()
 
@@ -43,7 +43,7 @@ public enum JPGSonyARWExtractor {
             from: arwURL,
             fullSize: fullSize,
             maxSize: maxThumbnailSize,
-            cancellationToken: cancellationToken,
+            cancellationToken: cancellationToken
         ) {
             return fallback
         }
@@ -72,7 +72,7 @@ public enum JPGSonyARWExtractor {
             guard let properties = CGImageSourceCopyPropertiesAtIndex(
                 imageSource,
                 index,
-                nil,
+                nil
             ) as? [CFString: Any]
             else {
                 RawParserKitLog.process.debug("JPGSonyARWExtractor: extractEmbeddedPreview(): Index \(index) - Failed to get properties")
@@ -140,7 +140,7 @@ public enum JPGSonyARWExtractor {
             from: arwURL,
             fullSize: fullSize,
             maxSize: maxThumbnailSize,
-            cancellationToken: cancellationToken,
+            cancellationToken: cancellationToken
         )
         if fallback == nil {
             RawParserKitLog.process.warning("JPGSonyARWExtractor: Binary fallback also failed for \(arwURL.lastPathComponent)")
@@ -156,7 +156,7 @@ public enum JPGSonyARWExtractor {
         from url: URL,
         fullSize: Bool,
         maxSize: CGFloat,
-        cancellationToken: ImageIOCancellationToken,
+        cancellationToken: ImageIOCancellationToken
     ) throws -> CGImage? {
         try cancellationToken.checkCancellation()
 

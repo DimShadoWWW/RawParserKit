@@ -50,7 +50,7 @@ struct CancellableImageIOWorkTests {
         await expectCancelledThumbnail {
             try await SonyThumbnailExtractor.extractSonyThumbnail(
                 from: missingRawURL(extension: "arw"),
-                maxDimension: 512,
+                maxDimension: 512
             )
         }
     }
@@ -60,7 +60,7 @@ struct CancellableImageIOWorkTests {
         await expectCancelledThumbnail {
             try await NikonThumbnailExtractor.extractNikonThumbnail(
                 from: missingRawURL(extension: "nef"),
-                maxDimension: 512,
+                maxDimension: 512
             )
         }
     }
@@ -70,7 +70,7 @@ struct CancellableImageIOWorkTests {
         let image = await runCancelledJPEGExtraction {
             await JPGSonyARWExtractor.jpgSonyARWExtractor(
                 from: missingRawURL(extension: "arw"),
-                fullSize: false,
+                fullSize: false
             )
         }
 
@@ -82,7 +82,7 @@ struct CancellableImageIOWorkTests {
         let image = await runCancelledJPEGExtraction {
             await JPGNikonNEFExtractor.jpgNikonNEFExtractor(
                 from: missingRawURL(extension: "nef"),
-                fullSize: false,
+                fullSize: false
             )
         }
 
@@ -90,7 +90,7 @@ struct CancellableImageIOWorkTests {
     }
 
     private func expectCancelledThumbnail(
-        _ extraction: @escaping @Sendable () async throws -> CGImage,
+        _ extraction: @escaping @Sendable () async throws -> CGImage
     ) async {
         await withTaskGroup(of: Void.self) { group in
             group.cancelAll()
@@ -103,7 +103,7 @@ struct CancellableImageIOWorkTests {
     }
 
     private func runCancelledJPEGExtraction(
-        _ extraction: @escaping @Sendable () async -> CGImage?,
+        _ extraction: @escaping @Sendable () async -> CGImage?
     ) async -> CGImage? {
         await withTaskGroup(of: CGImage?.self) { group in
             group.cancelAll()

@@ -108,7 +108,7 @@ public enum NikonMakerNoteParser {
                 return .init(
                     value: "\(result.width) \(result.height) \(result.x) \(result.y)",
                     trace: trace,
-                    failure: nil,
+                    failure: nil
                 )
             }
             trace.append("ERROR: fast-path focus parse failed: \(parsed.failure ?? "unknown parser failure")")
@@ -139,7 +139,7 @@ public enum NikonMakerNoteParser {
         return .init(
             value: "\(result.width) \(result.height) \(result.x) \(result.y)",
             trace: trace,
-            failure: nil,
+            failure: nil
         )
     }
 
@@ -222,7 +222,7 @@ public enum NikonMakerNoteParser {
     /// Reads raw bytes for an embedded JPEG from the file at the given absolute offset.
     public nonisolated static func readEmbeddedJPEGData(
         at location: NEFEmbeddedJPEGLocations.Location,
-        from url: URL,
+        from url: URL
     ) -> Data? {
         guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? fh.close() }
@@ -280,7 +280,7 @@ private struct NikonTIFFParser {
             in: nikonIFD,
             tag: 0x00B7,
             littleEndian: innerLE,
-            offsetBase: innerTIFF,
+            offsetBase: innerTIFF
         ), afSize >= 0x38 // need at least through offset 0x30 + 2
         else { return nil }
 
@@ -554,7 +554,7 @@ private struct NikonTIFFParser {
         in ifdOffset: Int,
         offTag: UInt16,
         lenTag: UInt16,
-        littleEndian: Bool,
+        littleEndian: Bool
     ) -> NEFEmbeddedJPEGLocations.Location? {
         guard let offset = subIFDOffset(in: ifdOffset, tag: offTag, littleEndian: littleEndian),
               let length = subIFDOffset(in: ifdOffset, tag: lenTag, littleEndian: littleEndian),
@@ -601,7 +601,7 @@ private struct NikonTIFFParser {
         in ifdOffset: Int,
         tag: UInt16,
         littleEndian: Bool,
-        offsetBase: Int? = nil,
+        offsetBase: Int? = nil
     ) -> (dataOffset: Int, byteCount: Int)? {
         guard ifdOffset + 2 <= data.count else { return nil }
         let entryCount = Int(readU16(at: ifdOffset, littleEndian: littleEndian))
