@@ -1,0 +1,26 @@
+// swift-tools-version: 6.2
+
+import PackageDescription
+
+let package = Package(
+    name: "RawParserKit",
+    platforms: [
+        .macOS(.v26),
+    ],
+    products: [
+        .library(
+            name: "RawParserKit",
+            targets: ["RawParserKit"],
+        ),
+    ],
+    targets: [
+        .target(
+            name: "RawParserKit",
+        ),
+        .testTarget(
+            name: "RawParserKitTests",
+            dependencies: ["RawParserKit"],
+        ),
+    ],
+    swiftLanguageModes: [.v6],
+)
