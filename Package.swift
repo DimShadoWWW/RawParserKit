@@ -15,7 +15,12 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "RawParserKit"
+            name: "RawParserKit",
+            swiftSettings: [
+                .defaultIsolation(MainActor.self),
+                .enableUpcomingFeature("InferIsolatedConformances"),
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+            ]
         ),
         .testTarget(
             name: "RawParserKitTests",
