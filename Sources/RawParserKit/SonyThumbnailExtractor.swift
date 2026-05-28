@@ -5,9 +5,8 @@
 //  Created by Thomas Evensen on 19/02/2026.
 //
 
-import CoreGraphics
+import AppKit
 import Foundation
-import ImageIO
 
 public enum SonyThumbnailExtractor {
     /// Extract thumbnail using generic ImageIO framework.

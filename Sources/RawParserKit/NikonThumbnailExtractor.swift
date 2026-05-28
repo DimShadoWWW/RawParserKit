@@ -4,9 +4,8 @@
 //
 //
 
-import CoreGraphics
+import AppKit
 import Foundation
-import ImageIO
 
 public enum NikonThumbnailExtractor {
     /// Extract thumbnail using generic ImageIO framework.
