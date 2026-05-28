@@ -2,7 +2,6 @@
 //  JPGSonyARWExtractor.swift
 //  RawCull
 //
-//  Created by Thomas Evensen on 20/02/2026.
 //
 
 import CoreGraphics

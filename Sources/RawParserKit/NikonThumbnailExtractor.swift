@@ -2,7 +2,6 @@
 //  NikonThumbnailExtractor.swift
 //  RawCull
 //
-//  Created by Thomas Evensen on 20/04/2026.
 //
 
 import CoreGraphics
