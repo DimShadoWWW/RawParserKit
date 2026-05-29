@@ -9,14 +9,14 @@ import AppKit
 import Foundation
 import OSLog
 
-public nonisolated enum SonyThumbnailExtractor {
+public enum SonyThumbnailExtractor {
     /// Extract thumbnail using generic ImageIO framework.
     /// - Parameters:
     ///   - url: The URL of the RAW image file.
     ///   - maxDimension: Maximum pixel size for the longest edge of the thumbnail.
     ///   - qualityCost: Interpolation cost.
     /// - Returns: A `CGImage` thumbnail.
-    public nonisolated static func extractSonyThumbnail(
+    public static func extractSonyThumbnail(
         from url: URL,
         maxDimension: CGFloat,
         qualityCost: Int = 4
