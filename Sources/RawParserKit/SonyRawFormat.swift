@@ -36,12 +36,13 @@ public enum SonyRawFormat: RawFormat {
     }
 
     /// TIFF Compression tag values used by Sony RAW. Newer bodies (A1, A7R V/VI…)
-    /// write 6/7; older bodies (A7R III and earlier) write 32767/32770.
+    /// write 6/7 or 32766; older bodies (A7R III and earlier) write 32767/32770.
     public nonisolated static func rawFileTypeString(compressionCode: Int) -> String {
         switch compressionCode {
         case 1: "Uncompressed"
         case 6: "Compressed"
         case 7: "Lossless Compressed"
+        case 32766: "Compressed"
         case 32767: "Compressed"
         case 32770: "Lossless Compressed"
         default: "Unknown (\(compressionCode))"
