@@ -72,6 +72,23 @@ if let format = RawFormatRegistry.format(for: url) {
 }
 ```
 
+Develop a full-resolution JPEG from Sony ARW sensor data:
+
+```swift
+let jpegData = try await SonyRawFormat.createFullSizeJPEG(
+    from: url,
+    quality: 1.0
+)
+
+await SaveJPGImage().save(jpegData, originalURL: url)
+```
+
+This path uses macOS `CIRAWFilter`, not the camera's embedded JPEG. Camera and
+compression-mode support therefore follows the RAW decoder installed with macOS.
+As of Apple's April 29, 2026 support list, the Sony A7 V (`ILCE-7M5`) is supported
+for lossless-compressed RAW only, while the A7R VI (`ILCE-7RM6`) is not listed.
+Unsupported files throw `SonyJPEGCreationError.unsupportedOrInvalidRAW`.
+
 Use parser diagnostics when building UI or logs around parse failures:
 
 ```swift

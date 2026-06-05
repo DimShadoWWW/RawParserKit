@@ -31,6 +31,17 @@ public enum SonyRawFormat: RawFormat {
         await JPGSonyARWExtractor.jpgSonyARWExtractor(from: url, fullSize: fullSize)
     }
 
+    /// Develops the Sony ARW sensor data at its full resolution and encodes it as sRGB JPEG data.
+    ///
+    /// This does not use the camera's embedded JPEG. Availability depends on the Sony camera and
+    /// RAW compression modes supported by the RAW decoder installed with macOS.
+    public nonisolated static func createFullSizeJPEG(
+        from url: URL,
+        quality: Double = 1.0
+    ) async throws -> Data {
+        try await SonyRAWJPEGCreator.createFullSizeJPEG(from: url, quality: quality)
+    }
+
     public nonisolated static func focusLocation(from url: URL) -> String? {
         SonyMakerNoteParser.focusLocation(from: url)
     }
