@@ -1,7 +1,7 @@
 import AppKit
 import ImageIO
 
-actor RawImageLoader {
+public actor RawImageLoader {
     static let shared = RawImageLoader()
 
     private struct ImageTaskKey: Hashable {
@@ -32,7 +32,7 @@ actor RawImageLoader {
 
     private init() {}
 
-    func thumbnail(for url: URL, targetSize: Int = 200) async -> NSImage? {
+    public func thumbnail200px(for url: URL, targetSize: Int = 200) async -> NSImage? {
         let boundedTargetSize = max(targetSize, 1)
         let key = ImageTaskKey(url: url, maxPixelSize: boundedTargetSize)
 
@@ -87,14 +87,14 @@ actor RawImageLoader {
         return image
     }
 
-    func extractedJPGPreview(for rawURL: URL) async -> CGImage? {
+    public func extractembeddedJPG(for rawURL: URL) async -> CGImage? {
         if let existing = extractedJPGTasks[rawURL] {
             return await existing.value
         }
 
         let limiter = fullSizeDecodeLimiter
         let task = Task<CGImage?, Never>(priority: .userInitiated) {
-            await Self.loadExtractedJPGPreview(for: rawURL, limiter: limiter)
+            await loadExtractedJPGPreview(for: rawURL, limiter: limiter)
         }
 
         extractedJPGTasks[rawURL] = task
@@ -103,7 +103,7 @@ actor RawImageLoader {
         return image
     }
 
-    static func loadExtractedJPGPreview(for rawURL: URL, limiter: DecodeConcurrencyLimiter) async -> CGImage? {
+    private func loadExtractedJPGPreview(for rawURL: URL, limiter: DecodeConcurrencyLimiter) async -> CGImage? {
         let sidecarJPGURL = rawURL
             .deletingPathExtension()
             .appendingPathExtension(SupportedFileType.jpg.rawValue)
