@@ -32,14 +32,16 @@ actor RawImageLoader {
 
     private init() {}
 
-   
     func thumbnail(for url: URL, targetSize: Int = 200) async -> NSImage? {
         let boundedTargetSize = max(targetSize, 1)
+        let key = ImageTaskKey(url: url, maxPixelSize: boundedTargetSize)
 
-        
+        if let existing = thumbnailTasks[key] {
+            return await existing.value
+        }
+
         let limiter = thumbnailDecodeLimiter
         let task = Task<NSImage?, Never>(priority: .utility) {
-            
             guard !Task.isCancelled else { return nil }
 
             // Bound concurrent decodes: fast grid scrolling can otherwise
@@ -79,11 +81,28 @@ actor RawImageLoader {
 
         }
 
+        thumbnailTasks[key] = task
         let image = await task.value
+        thumbnailTasks[key] = nil
         return image
     }
 
-   
+    func extractedJPGPreview(for rawURL: URL) async -> CGImage? {
+        if let existing = extractedJPGTasks[rawURL] {
+            return await existing.value
+        }
+
+        let limiter = fullSizeDecodeLimiter
+        let task = Task<CGImage?, Never>(priority: .userInitiated) {
+            await Self.loadExtractedJPGPreview(for: rawURL, limiter: limiter)
+        }
+
+        extractedJPGTasks[rawURL] = task
+        let image = await task.value
+        extractedJPGTasks[rawURL] = nil
+        return image
+    }
+
     static func loadExtractedJPGPreview(for rawURL: URL, limiter: DecodeConcurrencyLimiter) async -> CGImage? {
         let sidecarJPGURL = rawURL
             .deletingPathExtension()

@@ -15,19 +15,24 @@ import ImageIO
 import OSLog
 
 public enum JPGNikonNEFExtractor {
+    private static let extractionLimiter = DecodeConcurrencyLimiter(maxConcurrent: 2)
+
     public static func jpgNikonNEFExtractor(
         from nefURL: URL,
-        fullSize: Bool = false
+        fullSize: Bool = false,
+        limiter: DecodeConcurrencyLimiter? = nil
     ) async -> CGImage? {
         let maxThumbnailSize: CGFloat = fullSize ? 8640 : 4320
 
-        return await CancellableImageIOWork.runReturningNilOnCancellation(qos: .utility) { token in
-            try Self.extractSync(
-                from: nefURL,
-                fullSize: fullSize,
-                maxThumbnailSize: maxThumbnailSize,
-                cancellationToken: token
-            )
+        return await (limiter ?? extractionLimiter).run {
+            await CancellableImageIOWork.runReturningNilOnCancellation(qos: .utility) { token in
+                try Self.extractSync(
+                    from: nefURL,
+                    fullSize: fullSize,
+                    maxThumbnailSize: maxThumbnailSize,
+                    cancellationToken: token
+                )
+            }
         }
     }
 

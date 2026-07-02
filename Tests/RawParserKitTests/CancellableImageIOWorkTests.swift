@@ -23,6 +23,32 @@ private final class DecodeProbe: @unchecked Sendable {
     }
 }
 
+private final class ConcurrencyProbe: @unchecked Sendable {
+    private struct State {
+        var active = 0
+        var maxActive = 0
+    }
+
+    private let lock = OSAllocatedUnfairLock(initialState: State())
+
+    nonisolated func enter() {
+        lock.withLock {
+            $0.active += 1
+            $0.maxActive = max($0.maxActive, $0.active)
+        }
+    }
+
+    nonisolated func leave() {
+        lock.withLock {
+            $0.active -= 1
+        }
+    }
+
+    nonisolated var maxActive: Int {
+        lock.withLock { $0.maxActive }
+    }
+}
+
 struct CancellableImageIOWorkTests {
     @Test(.tags(.critical))
     func `cancelled ImageIO work resumes without running decode phase`() async throws {
@@ -43,6 +69,28 @@ struct CancellableImageIOWorkTests {
 
         try await Task.sleep(for: .milliseconds(50))
         #expect(!probe.didDecode)
+    }
+
+    @Test(.tags(.critical))
+    func `decode limiter bounds concurrent work`() async {
+        let limiter = DecodeConcurrencyLimiter(maxConcurrent: 2)
+        let probe = ConcurrencyProbe()
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0 ..< 8 {
+                group.addTask {
+                    _ = await limiter.run {
+                        probe.enter()
+                        try? await Task.sleep(for: .milliseconds(20))
+                        probe.leave()
+                        return true
+                    }
+                }
+            }
+        }
+
+        #expect(probe.maxActive > 0)
+        #expect(probe.maxActive <= 2)
     }
 
     @Test(.tags(.critical))
