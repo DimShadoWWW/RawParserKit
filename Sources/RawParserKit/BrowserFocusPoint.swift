@@ -1,6 +1,11 @@
 import Foundation
 
 public struct BrowserFocusPoint: Equatable {
-    let normalizedX: Double
-    let normalizedY: Double
+    public let normalizedX: Double
+    public let normalizedY: Double
+
+    public nonisolated init(normalizedX: Double, normalizedY: Double) {
+        self.normalizedX = normalizedX
+        self.normalizedY = normalizedY
+    }
 }
