@@ -2,7 +2,7 @@ import AppKit
 import ImageIO
 
 public actor RawImageLoader {
-    static let shared = RawImageLoader()
+    public nonisolated static let shared = RawImageLoader()
 
     private struct ImageTaskKey: Hashable {
         let url: URL
