@@ -8,26 +8,26 @@ The package is intentionally independent of RawCull view models, SwiftUI views, 
 
 - Sony `.arw`
 - Nikon `.nef`
+- Rendered-image helpers for `.jpg`, `.jpeg`, `.png`, `.tif`, and `.tiff`
 
 ## Requirements
 
-- Swift 6
+- Swift 6.2
 - macOS 26 or newer
-- Apple platforms with Foundation, CoreGraphics, ImageIO, CoreImage, and OSLog
+- Apple platforms with Foundation, AppKit, CoreGraphics, ImageIO, CoreImage, and OSLog
 
-## What The Package Provides
+## Package APIs
 
-- `RawFormat`: a vendor contract for thumbnail extraction, embedded JPEG extraction, focus-location parsing, compression labels, and size-class thresholds.
-- `RawFormatRegistry`: extension-based dispatch from a file URL to a registered raw format.
-- `SonyMakerNoteParser` and `NikonMakerNoteParser`: TIFF/MakerNote parsers for AF focus locations and embedded JPEG offsets.
-- `JPGSonyARWExtractor` and `JPGNikonNEFExtractor`: embedded full-preview JPEG extraction with ImageIO first and parser fallback where needed.
-- `SonyThumbnailExtractor` and `NikonThumbnailExtractor`: ImageIO-backed thumbnail extraction with cooperative cancellation.
-- `ThumbnailSharpener`: optional `CIRAWFilter` preview sharpening.
-- `CancellableImageIOWork`: a small utility for running synchronous ImageIO work off the caller while respecting Swift task cancellation.
+### Format Dispatch
 
-## Usage
+Use these APIs when you want vendor-neutral RAW handling.
 
-Resolve a format from a URL:
+- `RawFormat`: protocol implemented by each vendor format. It exposes `extensions`, `extractThumbnail(from:maxDimension:qualityCost:)`, `extractFullJPEG(from:fullSize:)`, `focusLocation(from:)`, `rawFileTypeString(compressionCode:)`, and `sizeClassThresholds(camera:)`.
+- `RawFormatRegistry.all`: registered format types.
+- `RawFormatRegistry.allExtensions`: union of supported RAW extensions.
+- `RawFormatRegistry.format(for:)`: resolves a file URL to `SonyRawFormat`, `NikonRawFormat`, or `nil`.
+- `SonyRawFormat`: `RawFormat` conformer for `.arw`.
+- `NikonRawFormat`: `RawFormat` conformer for `.nef`.
 
 ```swift
 import RawParserKit
@@ -35,65 +35,106 @@ import RawParserKit
 let url = URL(fileURLWithPath: "/photos/frame.ARW")
 
 if let format = RawFormatRegistry.format(for: url) {
-    print(format.rawFileTypeString(compressionCode: 7))
-}
-```
-
-Read a focus location directly:
-
-```swift
-let sonyFocus = SonyMakerNoteParser.focusLocation(from: url)
-let nikonFocus = NikonMakerNoteParser.focusLocation(from: url)
-```
-
-The focus-location string uses RawCull's existing shape:
-
-```text
-"imageWidth imageHeight focusX focusY"
-```
-
-Extract a thumbnail through the vendor-neutral format API:
-
-```swift
-if let format = RawFormatRegistry.format(for: url) {
     let thumbnail = try await format.extractThumbnail(
         from: url,
         maxDimension: 512,
         qualityCost: 4
     )
+
+    let preview = await format.extractFullJPEG(from: url, fullSize: false)
+    let focus = format.focusLocation(from: url)
+    let rawType = format.rawFileTypeString(compressionCode: 7)
+    let thresholds = format.sizeClassThresholds(camera: "ILCE-7RM5")
 }
 ```
 
-Extract the largest embedded JPEG preview:
+### High-Level Image Loading
+
+Use `RawImageLoader.shared` for app/browser-style loading with task deduplication and concurrency limits.
+
+- `thumbnail200px(for:targetSize:) async -> NSImage?`: loads a rendered-image or RAW thumbnail.
+- `extractembeddedJPG(for:) async -> CGImage?`: loads a sidecar JPG when present, otherwise extracts an embedded RAW preview.
+- `exifInfo(for:) async -> BrowserExifInfo?`: reads display-ready EXIF rows and focus point information.
 
 ```swift
-if let format = RawFormatRegistry.format(for: url) {
-    let preview = await format.extractFullJPEG(from: url, fullSize: true)
-}
+let image = await RawImageLoader.shared.thumbnail200px(for: url, targetSize: 240)
+let preview = await RawImageLoader.shared.extractembeddedJPG(for: url)
+let exif = await RawImageLoader.shared.exifInfo(for: url)
 ```
 
-Develop a full-resolution JPEG from Sony ARW sensor data:
+`BrowserExifInfo` contains optional `camera`, `lens`, `exposure`, `aperture`, `focalLength`, `iso`, `capturedAt`, `dimensions`, and `focusPoint` fields. Its `rows` property returns display labels and values for non-empty EXIF fields, and `isEmpty` reports whether there is anything to show.
+
+`BrowserFocusPoint` stores `normalizedX` and `normalizedY` coordinates.
+
+### Thumbnail And Preview Extraction
+
+Use the format-neutral `RawFormat` APIs where possible. The vendor-specific extractors are public when callers need direct access.
+
+- `SonyThumbnailExtractor.extractSonyThumbnail(from:maxDimension:qualityCost:) async throws -> CGImage`
+- `NikonThumbnailExtractor.extractNikonThumbnail(from:maxDimension:qualityCost:) async throws -> CGImage`
+- `JPGSonyARWExtractor.jpgSonyARWExtractor(from:fullSize:limiter:) async -> CGImage?`
+- `JPGNikonNEFExtractor.jpgNikonNEFExtractor(from:fullSize:limiter:) async -> CGImage?`
+- `ThumbnailSharpener.sharpenedPreview(from:maxDimension:amount:) -> CGImage?`
+
+```swift
+let thumbnail = try await SonyThumbnailExtractor.extractSonyThumbnail(
+    from: url,
+    maxDimension: 512
+)
+
+let embeddedPreview = await JPGSonyARWExtractor.jpgSonyARWExtractor(
+    from: url,
+    fullSize: true
+)
+```
+
+`fullSize: true` allows previews up to 8640 px on the longest edge. `fullSize: false` downsamples large embedded previews to 4320 px.
+
+### Sony Full-Size JPEG Creation
+
+`SonyRawFormat.createFullSizeJPEG(from:quality:)` develops Sony ARW sensor data through macOS `CIRAWFilter` and encodes it as sRGB JPEG data.
 
 ```swift
 let jpegData = try await SonyRawFormat.createFullSizeJPEG(
     from: url,
     quality: 1.0
 )
-
-await SaveJPGImage().save(jpegData, originalURL: url)
 ```
 
-This path uses macOS `CIRAWFilter`, not the camera's embedded JPEG. Camera and
-compression-mode support therefore follows the RAW decoder installed with macOS.
-As of Apple's April 29, 2026 support list, the Sony A7 V (`ILCE-7M5`) is supported
-for lossless-compressed RAW only, while the A7R VI (`ILCE-7RM6`) is not listed.
-Unsupported files throw `SonyJPEGCreationError.unsupportedOrInvalidRAW`.
+This does not use the camera's embedded JPEG. Camera and compression-mode support follows the RAW decoder installed with macOS. Unsupported files throw `SonyJPEGCreationError.unsupportedOrInvalidRAW`.
 
-Use parser diagnostics when building UI or logs around parse failures:
+`SonyJPEGCreationError` cases:
+
+- `invalidQuality(Double)`
+- `unsupportedOrInvalidRAW`
+- `encodingFailed`
+
+### MakerNote Parsing
+
+Focus-location APIs return a string in RawCull's existing shape:
+
+```text
+"imageWidth imageHeight focusX focusY"
+```
+
+Public parser APIs:
+
+- `SonyMakerNoteParser.focusLocation(from:) -> String?`
+- `SonyMakerNoteParser.focusLocationDiagnostics(from:) -> RawParserDiagnostics<String>`
+- `SonyMakerNoteParser.embeddedJPEGLocations(from:) -> EmbeddedJPEGLocations?`
+- `SonyMakerNoteParser.embeddedJPEGLocationsDiagnostics(from:) -> RawParserDiagnostics<EmbeddedJPEGLocations>`
+- `SonyMakerNoteParser.readEmbeddedJPEGData(at:from:) -> Data?`
+- `NikonMakerNoteParser.focusLocation(from:) -> String?`
+- `NikonMakerNoteParser.focusLocationDiagnostics(from:) -> RawParserDiagnostics<String>`
+- `NikonMakerNoteParser.embeddedJPEGLocations(from:) -> NEFEmbeddedJPEGLocations?`
+- `NikonMakerNoteParser.embeddedJPEGLocationsDiagnostics(from:) -> RawParserDiagnostics<NEFEmbeddedJPEGLocations>`
+- `NikonMakerNoteParser.readEmbeddedJPEGData(at:from:) -> Data?`
 
 ```swift
-let diagnostics = SonyMakerNoteParser.focusLocationDiagnostics(from: url)
+let sonyFocus = SonyMakerNoteParser.focusLocation(from: url)
+let nikonFocus = NikonMakerNoteParser.focusLocation(from: url)
 
+let diagnostics = SonyMakerNoteParser.focusLocationDiagnostics(from: url)
 if let focus = diagnostics.value {
     print("Focus:", focus)
 } else {
@@ -102,7 +143,7 @@ if let focus = diagnostics.value {
 }
 ```
 
-Read embedded JPEG data from parser-discovered offsets:
+Sony embedded JPEG locations are represented by `EmbeddedJPEGLocations` with `thumbnail`, `preview`, and `fullJPEG` fields. Nikon embedded JPEG locations are represented by `NEFEmbeddedJPEGLocations` with `preview` and `ifd1JPEG` fields. Each location has an absolute file `offset` and byte `length`.
 
 ```swift
 if let locations = SonyMakerNoteParser.embeddedJPEGLocations(from: url),
@@ -111,6 +152,44 @@ if let locations = SonyMakerNoteParser.embeddedJPEGLocations(from: url),
     print("JPEG bytes:", data.count)
 }
 ```
+
+`RawParserDiagnostics<Value>` contains:
+
+- `value: Value?`
+- `trace: [String]`
+- `failure: String?`
+
+### Orientation-Normalized Image Loading
+
+`OrientationNormalizedImageLoader` provides lower-level ImageIO helpers for rendered images and embedded previews.
+
+- `loadCGImage(from url:) -> CGImage?`
+- `loadCGImage(from data:) -> CGImage?`
+- `loadThumbnail(from:maxPixelSize:) -> CGImage?`
+- `loadEmbeddedThumbnail(from:maxPixelSize:) -> CGImage?`
+- `applyingSourceOrientation(to:from:) -> CGImage?`
+- `loadSonyEmbeddedPreview(from:) -> CGImage?`
+- `loadEmbeddedPreview(from:sourceURL:) -> CGImage?`
+
+`SupportedFileType` enumerates `.arw`, `.nef`, `.jpeg`, `.jpg`, `.png`, `.tif`, and `.tiff`.
+
+### Cancellation And Decode Limiting
+
+- `CancellableImageIOWork.run(qos:_:) async throws -> Success`: runs synchronous ImageIO work on a global queue with a cooperative cancellation token.
+- `CancellableImageIOWork.runReturningNilOnCancellation(qos:_:) async -> Success?`: converts cancellation and thrown errors to `nil`.
+- `ImageIOCancellationToken.cancel()`, `isCancelled`, and `checkCancellation()`.
+- `DecodeConcurrencyLimiter(maxConcurrent:)`: actor that bounds expensive async decode work.
+- `DecodeConcurrencyLimiter.run(_:) async -> T?`: runs work once a slot is available and returns `nil` if cancelled before or during execution.
+
+### Errors
+
+`ThumbnailError` cases:
+
+- `invalidSource`
+- `generationFailed`
+- `contextCreationFailed`
+
+`SonyJPEGCreationError` cases are listed in the Sony full-size JPEG section.
 
 ## Concurrency Notes
 
