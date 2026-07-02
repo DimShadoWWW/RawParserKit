@@ -14,10 +14,10 @@ import Foundation
 import ImageIO
 import OSLog
 
-public enum JPGNikonNEFExtractor {
+public enum NikonEmbeddedJPEGExtractor {
     private static let extractionLimiter = DecodeConcurrencyLimiter(maxConcurrent: 2)
 
-    public static func jpgNikonNEFExtractor(
+    public static func extractEmbeddedJPEG(
         from nefURL: URL,
         fullSize: Bool = false,
         limiter: DecodeConcurrencyLimiter? = nil
@@ -164,5 +164,20 @@ public enum JPGNikonNEFExtractor {
             if let width = exif[kCGImagePropertyExifPixelXDimension] as? Double { return Int(width) }
         }
         return nil
+    }
+}
+
+@available(*, deprecated, message: "Use NikonEmbeddedJPEGExtractor.extractEmbeddedJPEG(from:fullSize:limiter:) instead.")
+public enum JPGNikonNEFExtractor {
+    public static func jpgNikonNEFExtractor(
+        from nefURL: URL,
+        fullSize: Bool = false,
+        limiter: DecodeConcurrencyLimiter? = nil
+    ) async -> CGImage? {
+        await NikonEmbeddedJPEGExtractor.extractEmbeddedJPEG(
+            from: nefURL,
+            fullSize: fullSize,
+            limiter: limiter
+        )
     }
 }

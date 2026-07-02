@@ -13,7 +13,7 @@ import Foundation
 
 public enum SonyRawFormat: RawFormat {
     public nonisolated static let extensions: Set<String> = ["arw"]
-    // nonisolated static let displayName: String = "Sony ARW"
+    public nonisolated static let displayName = "Sony ARW"
 
     public nonisolated static func extractThumbnail(
         from url: URL,
@@ -27,8 +27,13 @@ public enum SonyRawFormat: RawFormat {
         )
     }
 
+    @available(*, deprecated, message: "Use extractEmbeddedPreview(from:fullSize:) instead.")
     public nonisolated static func extractFullJPEG(from url: URL, fullSize: Bool) async -> CGImage? {
-        await JPGSonyARWExtractor.jpgSonyARWExtractor(from: url, fullSize: fullSize)
+        await extractEmbeddedPreview(from: url, fullSize: fullSize)
+    }
+
+    public nonisolated static func extractEmbeddedPreview(from url: URL, fullSize: Bool) async -> CGImage? {
+        await SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(from: url, fullSize: fullSize)
     }
 
     /// Develops the Sony ARW sensor data at its full resolution and encodes it as sRGB JPEG data.

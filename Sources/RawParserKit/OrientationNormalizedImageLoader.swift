@@ -8,7 +8,7 @@ public enum SupportedFileType: String, CaseIterable {
     case png
     case tif, tiff
     
-    nonisolated static let renderedImageExtensions: Set<String> = [
+    public nonisolated static let renderedImageExtensions: Set<String> = [
         SupportedFileType.jpeg.rawValue,
         SupportedFileType.jpg.rawValue,
         SupportedFileType.png.rawValue,
@@ -16,7 +16,7 @@ public enum SupportedFileType: String, CaseIterable {
         SupportedFileType.tiff.rawValue
     ]
 
-    nonisolated static func isRenderedImage(_ url: URL) -> Bool {
+    public nonisolated static func isRenderedImage(_ url: URL) -> Bool {
         renderedImageExtensions.contains(url.pathExtension.lowercased())
     }
 }

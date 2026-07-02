@@ -22,7 +22,7 @@ The package is intentionally independent of RawCull view models, SwiftUI views, 
 
 Use these APIs when you want vendor-neutral RAW handling.
 
-- `RawFormat`: protocol implemented by each vendor format. It exposes `extensions`, `extractThumbnail(from:maxDimension:qualityCost:)`, `extractFullJPEG(from:fullSize:)`, `focusLocation(from:)`, `rawFileTypeString(compressionCode:)`, and `sizeClassThresholds(camera:)`.
+- `RawFormat`: protocol implemented by each vendor format. It exposes `extensions`, `displayName`, `extractThumbnail(from:maxDimension:qualityCost:)`, `extractEmbeddedPreview(from:fullSize:)`, `focusLocation(from:)`, `rawFileTypeString(compressionCode:)`, `sizeClassThresholds(camera:)`, and `rawSizeClass(width:height:camera:)`.
 - `RawFormatRegistry.all`: registered format types.
 - `RawFormatRegistry.allExtensions`: union of supported RAW extensions.
 - `RawFormatRegistry.format(for:)`: resolves a file URL to `SonyRawFormat`, `NikonRawFormat`, or `nil`.
@@ -41,10 +41,10 @@ if let format = RawFormatRegistry.format(for: url) {
         qualityCost: 4
     )
 
-    let preview = await format.extractFullJPEG(from: url, fullSize: false)
+    let preview = await format.extractEmbeddedPreview(from: url, fullSize: false)
     let focus = format.focusLocation(from: url)
     let rawType = format.rawFileTypeString(compressionCode: 7)
-    let thresholds = format.sizeClassThresholds(camera: "ILCE-7RM5")
+    let sizeClass = format.rawSizeClass(width: 9504, height: 6336, camera: "ILCE-7RM5")
 }
 ```
 
@@ -52,19 +52,23 @@ if let format = RawFormatRegistry.format(for: url) {
 
 Use `RawImageLoader.shared` for app/browser-style loading with task deduplication and concurrency limits.
 
-- `thumbnail200px(for:targetSize:) async -> NSImage?`: loads a rendered-image or RAW thumbnail.
-- `extractembeddedJPG(for:) async -> CGImage?`: loads a sidecar JPG when present, otherwise extracts an embedded RAW preview.
-- `exifInfo(for:) async -> BrowserExifInfo?`: reads display-ready EXIF rows and focus point information.
+- `thumbnail(for:maxPixelSize:) async -> NSImage?`: loads a rendered-image or RAW thumbnail.
+- `thumbnailCGImage(for:maxPixelSize:) async -> CGImage?`: loads the same thumbnail as a `CGImage`.
+- `previewImage(for:) async -> CGImage?`: loads a sidecar JPG when present, otherwise extracts an embedded RAW preview.
+- `metadata(for:) async -> RawImageMetadata?`: reads display-ready EXIF rows, RAW metadata, and focus point information.
 
 ```swift
-let image = await RawImageLoader.shared.thumbnail200px(for: url, targetSize: 240)
-let preview = await RawImageLoader.shared.extractembeddedJPG(for: url)
-let exif = await RawImageLoader.shared.exifInfo(for: url)
+let image = await RawImageLoader.shared.thumbnail(for: url, maxPixelSize: 240)
+let cgImage = await RawImageLoader.shared.thumbnailCGImage(for: url, maxPixelSize: 240)
+let preview = await RawImageLoader.shared.previewImage(for: url)
+let metadata = await RawImageLoader.shared.metadata(for: url)
 ```
 
-`BrowserExifInfo` contains optional `camera`, `lens`, `exposure`, `aperture`, `focalLength`, `iso`, `capturedAt`, `dimensions`, and `focusPoint` fields. Its `rows` property returns display labels and values for non-empty EXIF fields, and `isEmpty` reports whether there is anything to show.
+`RawImageMetadata` contains optional `camera`, `lens`, `exposure`, `aperture`, `apertureValue`, `focalLength`, `iso`, `isoValue`, `capturedAt`, `dimensions`, `focusPoint`, `rawFileType`, `rawSizeClass`, `pixelWidth`, and `pixelHeight` fields. Its `rows` property returns display labels and values for non-empty fields, and `isEmpty` reports whether there is anything to show.
 
-`BrowserFocusPoint` stores `normalizedX` and `normalizedY` coordinates.
+`RawFocusPoint` stores `normalizedX` and `normalizedY` coordinates. It can also parse the MakerNote focus-location string returned by `focusLocation(from:)`.
+
+The older `thumbnail200px(for:targetSize:)`, `extractembeddedJPG(for:)`, `exifInfo(for:)`, `BrowserExifInfo`, and `BrowserFocusPoint` names remain available as deprecated compatibility shims.
 
 ### Thumbnail And Preview Extraction
 
@@ -72,8 +76,8 @@ Use the format-neutral `RawFormat` APIs where possible. The vendor-specific extr
 
 - `SonyThumbnailExtractor.extractSonyThumbnail(from:maxDimension:qualityCost:) async throws -> CGImage`
 - `NikonThumbnailExtractor.extractNikonThumbnail(from:maxDimension:qualityCost:) async throws -> CGImage`
-- `JPGSonyARWExtractor.jpgSonyARWExtractor(from:fullSize:limiter:) async -> CGImage?`
-- `JPGNikonNEFExtractor.jpgNikonNEFExtractor(from:fullSize:limiter:) async -> CGImage?`
+- `SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(from:fullSize:limiter:) async -> CGImage?`
+- `NikonEmbeddedJPEGExtractor.extractEmbeddedJPEG(from:fullSize:limiter:) async -> CGImage?`
 - `ThumbnailSharpener.sharpenedPreview(from:maxDimension:amount:) -> CGImage?`
 
 ```swift
@@ -82,13 +86,15 @@ let thumbnail = try await SonyThumbnailExtractor.extractSonyThumbnail(
     maxDimension: 512
 )
 
-let embeddedPreview = await JPGSonyARWExtractor.jpgSonyARWExtractor(
+let embeddedPreview = await SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(
     from: url,
     fullSize: true
 )
 ```
 
 `fullSize: true` allows previews up to 8640 px on the longest edge. `fullSize: false` downsamples large embedded previews to 4320 px.
+
+The older `JPGSonyARWExtractor.jpgSonyARWExtractor(...)` and `JPGNikonNEFExtractor.jpgNikonNEFExtractor(...)` entrypoints remain available as deprecated compatibility shims.
 
 ### Sony Full-Size JPEG Creation
 

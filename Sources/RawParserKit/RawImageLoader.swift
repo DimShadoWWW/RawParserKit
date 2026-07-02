@@ -20,7 +20,7 @@ public actor RawImageLoader {
 
     private var thumbnailTasks: [ImageTaskKey: Task<NSImage?, Never>] = [:]
     private var extractedJPGTasks: [URL: Task<CGImage?, Never>] = [:]
-    private var exifInfoTasks: [URL: Task<BrowserExifInfo?, Never>] = [:]
+    private var metadataTasks: [URL: Task<RawImageMetadata?, Never>] = [:]
 
     /// Bounds how many expensive full-size RAW decodes/demosaics can run at
     /// once. Without this, rapid zoom navigation could otherwise pile up
@@ -32,8 +32,8 @@ public actor RawImageLoader {
 
     private init() {}
 
-    public func thumbnail200px(for url: URL, targetSize: Int = 200) async -> NSImage? {
-        let boundedTargetSize = max(targetSize, 1)
+    public func thumbnail(for url: URL, maxPixelSize: Int = 200) async -> NSImage? {
+        let boundedTargetSize = max(maxPixelSize, 1)
         let key = ImageTaskKey(url: url, maxPixelSize: boundedTargetSize)
 
         if let existing = thumbnailTasks[key] {
@@ -87,7 +87,17 @@ public actor RawImageLoader {
         return image
     }
 
-    public func extractembeddedJPG(for rawURL: URL) async -> CGImage? {
+    public func thumbnailCGImage(for url: URL, maxPixelSize: Int = 200) async -> CGImage? {
+        guard let image = await thumbnail(for: url, maxPixelSize: maxPixelSize) else { return nil }
+        return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    @available(*, deprecated, message: "Use thumbnail(for:maxPixelSize:) instead.")
+    public func thumbnail200px(for url: URL, targetSize: Int = 200) async -> NSImage? {
+        await thumbnail(for: url, maxPixelSize: targetSize)
+    }
+
+    public func previewImage(for rawURL: URL) async -> CGImage? {
         if let existing = extractedJPGTasks[rawURL] {
             return await existing.value
         }
@@ -101,6 +111,11 @@ public actor RawImageLoader {
         let image = await task.value
         extractedJPGTasks[rawURL] = nil
         return image
+    }
+
+    @available(*, deprecated, message: "Use previewImage(for:) instead.")
+    public func extractembeddedJPG(for rawURL: URL) async -> CGImage? {
+        await previewImage(for: rawURL)
     }
 
     private func loadExtractedJPGPreview(for rawURL: URL, limiter: DecodeConcurrencyLimiter) async -> CGImage? {
@@ -138,7 +153,7 @@ public actor RawImageLoader {
                 return orientedPreview
             }
 
-            guard let image = await format.extractFullJPEG(from: rawURL, fullSize: false) else {
+            guard let image = await format.extractEmbeddedPreview(from: rawURL, fullSize: false) else {
                 return nil
             }
             return OrientationNormalizedImageLoader.applyingSourceOrientation(to: image, from: rawURL) ?? image
@@ -148,19 +163,24 @@ public actor RawImageLoader {
         
     }
 
-    public func exifInfo(for url: URL) async -> BrowserExifInfo? {
-        if let existing = exifInfoTasks[url] {
+    public func metadata(for url: URL) async -> RawImageMetadata? {
+        if let existing = metadataTasks[url] {
             return await existing.value
         }
 
-        let task = Task<BrowserExifInfo?, Never>(priority: .utility) {
-            await Self.loadExifInfo(from: url)
+        let task = Task<RawImageMetadata?, Never>(priority: .utility) {
+            await Self.loadMetadata(from: url)
         }
 
-        exifInfoTasks[url] = task
+        metadataTasks[url] = task
         let info = await task.value
-        exifInfoTasks[url] = nil
+        metadataTasks[url] = nil
         return info
+    }
+
+    @available(*, deprecated, message: "Use metadata(for:) instead.")
+    public func exifInfo(for url: URL) async -> BrowserExifInfo? {
+        await metadata(for: url)
     }
 
     private nonisolated static func loadCGImage(from url: URL) async -> CGImage? {
@@ -169,20 +189,33 @@ public actor RawImageLoader {
         }.value
     }
 
-    private nonisolated static func loadExifInfo(from url: URL) async -> BrowserExifInfo? {
+    private nonisolated static func loadMetadata(from url: URL) async -> RawImageMetadata? {
         await Task.detached(priority: .utility) {
             let sidecarURL = url.deletingPathExtension().appendingPathExtension("jpg")
             let properties = imageProperties(from: url) ?? imageProperties(from: sidecarURL)
             let exif = properties?[kCGImagePropertyExifDictionary] as? [CFString: Any]
             let tiff = properties?[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
+            let format = RawFormatRegistry.format(for: url)
 
             let make = stringValue(tiff?[kCGImagePropertyTIFFMake])
             let model = stringValue(tiff?[kCGImagePropertyTIFFModel])
             let camera = joined([make, model])
 
+            let fNumber = numberValue(exif?[kCGImagePropertyExifFNumber])
+            let isoValue = isoNumber(exif?[kCGImagePropertyExifISOSpeedRatings])
+            let pixelWidth = intValue(properties?[kCGImagePropertyPixelWidth]) ?? intValue(exif?[kCGImagePropertyExifPixelXDimension])
+            let pixelHeight = intValue(properties?[kCGImagePropertyPixelHeight]) ?? intValue(exif?[kCGImagePropertyExifPixelYDimension])
+            let compression = intValue(tiff?[kCGImagePropertyTIFFCompression])
+            let cameraModel = model ?? camera ?? ""
+            let rawSizeClass: String? = if let pixelWidth, let pixelHeight, let format {
+                format.rawSizeClass(width: pixelWidth, height: pixelHeight, camera: cameraModel)
+            } else {
+                nil
+            }
+
             let lens = stringValue(exif?[kCGImagePropertyExifLensModel])
             let exposure = shutterDescription(numberValue(exif?[kCGImagePropertyExifExposureTime]))
-            let aperture = apertureDescription(numberValue(exif?[kCGImagePropertyExifFNumber]))
+            let aperture = apertureDescription(fNumber)
             let focalLength = focalLengthDescription(numberValue(exif?[kCGImagePropertyExifFocalLength]))
             let iso = isoDescription(exif?[kCGImagePropertyExifISOSpeedRatings])
             let capturedAt = capturedAtDescription(
@@ -197,16 +230,22 @@ public actor RawImageLoader {
                 )
             }
 
-            let info = BrowserExifInfo(
+            let info = RawImageMetadata(
                 camera: camera,
                 lens: lens,
                 exposure: exposure,
                 aperture: aperture,
+                apertureValue: fNumber,
                 focalLength: focalLength,
                 iso: iso,
+                isoValue: isoValue,
                 capturedAt: capturedAt,
                 dimensions: dimensions,
                 focusPoint: loadedFocusPoint,
+                rawFileType: compression.flatMap { format?.rawFileTypeString(compressionCode: $0) },
+                rawSizeClass: rawSizeClass,
+                pixelWidth: pixelWidth,
+                pixelHeight: pixelHeight,
             )
             return info.isEmpty ? nil : info
         }.value
@@ -258,6 +297,14 @@ public actor RawImageLoader {
         default:
             nil
         }
+    }
+
+    private nonisolated static func isoNumber(_ value: Any?) -> Int? {
+        if let values = value as? [Any],
+           let iso = values.compactMap({ intValue($0) }).first {
+            return iso
+        }
+        return intValue(value)
     }
 
     private nonisolated static func joined(_ values: [String?]) -> String? {
@@ -317,28 +364,16 @@ public actor RawImageLoader {
         return "\(width) x \(height)"
     }
 
-    private nonisolated static func makerNoteFocusPoint(from url: URL) -> BrowserFocusPoint? {
+    private nonisolated static func makerNoteFocusPoint(from url: URL) -> RawFocusPoint? {
         guard let focusLocation = RawFormatRegistry.format(for: url)?.focusLocation(from: url) else { return nil }
-        let values = focusLocation
-            .split(whereSeparator: \.isWhitespace)
-            .compactMap { Double($0) }
-
-        guard values.count == 4,
-              values[0] > 0,
-              values[1] > 0
-        else { return nil }
-
-        let normalizedX = values[2] / values[0]
-        let normalizedY = values[3] / values[1]
-        guard (0 ... 1).contains(normalizedX), (0 ... 1).contains(normalizedY) else { return nil }
-        return BrowserFocusPoint(normalizedX: normalizedX, normalizedY: normalizedY)
+        return RawFocusPoint(focusLocation: focusLocation)
     }
 
     private nonisolated static func focusPoint(
         from value: Any?,
         properties: [CFString: Any],
         exif: [CFString: Any]?,
-    ) -> BrowserFocusPoint? {
+    ) -> RawFocusPoint? {
         let values = numericArray(value)
         guard values.count >= 2 else { return nil }
 
@@ -349,7 +384,7 @@ public actor RawImageLoader {
         let normalizedX = values[0] / width
         let normalizedY = values[1] / height
         guard (0 ... 1).contains(normalizedX), (0 ... 1).contains(normalizedY) else { return nil }
-        return BrowserFocusPoint(normalizedX: normalizedX, normalizedY: normalizedY)
+        return RawFocusPoint(normalizedX: normalizedX, normalizedY: normalizedY)
     }
 
     private nonisolated static func numericArray(_ value: Any?) -> [Double] {

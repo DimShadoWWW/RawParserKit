@@ -17,8 +17,8 @@ public protocol RawFormat: Sendable {
     /// Lowercased file extensions, no leading dot. e.g. `["arw"]`, `["nef"]`.
     nonisolated static var extensions: Set<String> { get }
 
-    // Human-readable label for UI, e.g. "Sony ARW", "Nikon NEF".
-    // nonisolated static var displayName: String { get }
+    /// Human-readable format label, e.g. "Sony ARW", "Nikon NEF".
+    nonisolated static var displayName: String { get }
 
     /// Embedded-JPEG-backed thumbnail. Must hop off the caller's thread internally.
     nonisolated static func extractThumbnail(
@@ -29,7 +29,12 @@ public protocol RawFormat: Sendable {
 
     /// Largest embedded JPEG, optionally downsampled. Returns nil when the format
     /// has no usable embedded preview or decode fails.
+    @available(*, deprecated, message: "Use extractEmbeddedPreview(from:fullSize:) instead.")
     nonisolated static func extractFullJPEG(from url: URL, fullSize: Bool) async -> CGImage?
+
+    /// Largest embedded JPEG preview, optionally downsampled. Returns nil when the
+    /// format has no usable embedded preview or decode fails.
+    nonisolated static func extractEmbeddedPreview(from url: URL, fullSize: Bool) async -> CGImage?
 
     /// AF focus location encoded as `"imageWidth imageHeight focusX focusY"` in
     /// pixel space. Returns nil when the MakerNote lacks the tag or cannot be parsed.
@@ -42,4 +47,17 @@ public protocol RawFormat: Sendable {
     /// Body-specific (L, M) megapixel thresholds for size-class classification.
     /// Return `(lThreshold, mThreshold)`; the caller labels S / M / L.
     nonisolated static func sizeClassThresholds(camera: String) -> (L: Double, M: Double)
+
+    /// Classifies pixel dimensions as S / M / L using the format's body-specific thresholds.
+    nonisolated static func rawSizeClass(width: Int, height: Int, camera: String) -> String
+}
+
+public extension RawFormat {
+    nonisolated static func rawSizeClass(width: Int, height: Int, camera: String) -> String {
+        let megapixels = Double(width * height) / 1_000_000
+        let thresholds = sizeClassThresholds(camera: camera)
+        if megapixels >= thresholds.L { return "L" }
+        if megapixels >= thresholds.M { return "M" }
+        return "S"
+    }
 }

@@ -9,10 +9,10 @@ import Foundation
 import ImageIO
 import OSLog
 
-public enum JPGSonyARWExtractor {
+public enum SonyEmbeddedJPEGExtractor {
     private static let extractionLimiter = DecodeConcurrencyLimiter(maxConcurrent: 2)
 
-    public static func jpgSonyARWExtractor(
+    public static func extractEmbeddedJPEG(
         from arwURL: URL,
         fullSize: Bool = false,
         limiter: DecodeConcurrencyLimiter? = nil
@@ -205,5 +205,20 @@ public enum JPGSonyARWExtractor {
             if let width = exif[kCGImagePropertyExifPixelXDimension] as? Double { return Int(width) }
         }
         return nil
+    }
+}
+
+@available(*, deprecated, message: "Use SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(from:fullSize:limiter:) instead.")
+public enum JPGSonyARWExtractor {
+    public static func jpgSonyARWExtractor(
+        from arwURL: URL,
+        fullSize: Bool = false,
+        limiter: DecodeConcurrencyLimiter? = nil
+    ) async -> CGImage? {
+        await SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(
+            from: arwURL,
+            fullSize: fullSize,
+            limiter: limiter
+        )
     }
 }

@@ -476,7 +476,7 @@ struct SonyEmbeddedJPEGLocatorTests {
         let fixture = try makeSyntheticA7RVIARWWithEmbeddedJPEGs()
         defer { try? FileManager.default.removeItem(at: fixture.url) }
 
-        let extracted = try #require(await JPGSonyARWExtractor.jpgSonyARWExtractor(
+        let extracted = try #require(await SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(
             from: fixture.url,
             fullSize: false
         ))

@@ -116,7 +116,7 @@ struct CancellableImageIOWorkTests {
     @Test(.tags(.critical))
     func `cancelled Sony JPEG extraction returns nil`() async {
         let image = await runCancelledJPEGExtraction {
-            await JPGSonyARWExtractor.jpgSonyARWExtractor(
+            await SonyEmbeddedJPEGExtractor.extractEmbeddedJPEG(
                 from: missingRawURL(extension: "arw"),
                 fullSize: false
             )
@@ -128,7 +128,7 @@ struct CancellableImageIOWorkTests {
     @Test(.tags(.critical))
     func `cancelled Nikon JPEG extraction returns nil`() async {
         let image = await runCancelledJPEGExtraction {
-            await JPGNikonNEFExtractor.jpgNikonNEFExtractor(
+            await NikonEmbeddedJPEGExtractor.extractEmbeddedJPEG(
                 from: missingRawURL(extension: "nef"),
                 fullSize: false
             )

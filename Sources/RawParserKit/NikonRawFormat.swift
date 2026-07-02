@@ -13,7 +13,7 @@ import Foundation
 
 public enum NikonRawFormat: RawFormat {
     public nonisolated static let extensions: Set<String> = ["nef"]
-    // nonisolated static let displayName: String = "Nikon NEF"
+    public nonisolated static let displayName = "Nikon NEF"
 
     // MARK: - Thumbnail
 
@@ -31,8 +31,13 @@ public enum NikonRawFormat: RawFormat {
 
     // MARK: - Full-resolution embedded JPEG
 
+    @available(*, deprecated, message: "Use extractEmbeddedPreview(from:fullSize:) instead.")
     public nonisolated static func extractFullJPEG(from url: URL, fullSize: Bool) async -> CGImage? {
-        await JPGNikonNEFExtractor.jpgNikonNEFExtractor(from: url, fullSize: fullSize)
+        await extractEmbeddedPreview(from: url, fullSize: fullSize)
+    }
+
+    public nonisolated static func extractEmbeddedPreview(from url: URL, fullSize: Bool) async -> CGImage? {
+        await NikonEmbeddedJPEGExtractor.extractEmbeddedJPEG(from: url, fullSize: fullSize)
     }
 
     // MARK: - AF focus location
