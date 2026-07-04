@@ -116,6 +116,31 @@ private func makeSyntheticTIFFWithEmptyIFD0(extension ext: String = "arw") throw
     return url
 }
 
+private func makeSyntheticARWWithPreviewPointer(offset: UInt32, length: UInt32) throws -> URL {
+    func le16(_ v: UInt16) -> [UInt8] {
+        [UInt8(v & 0xFF), UInt8(v >> 8)]
+    }
+    func le32(_ v: UInt32) -> [UInt8] {
+        [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF), UInt8((v >> 16) & 0xFF), UInt8(v >> 24)]
+    }
+    func ifdEntry(tag: UInt16, type: UInt16, count: UInt32, value: UInt32) -> [UInt8] {
+        le16(tag) + le16(type) + le32(count) + le32(value)
+    }
+
+    var bytes: [UInt8] = []
+    bytes += [0x49, 0x49, 0x2A, 0x00]
+    bytes += le32(8)
+    bytes += le16(2)
+    bytes += ifdEntry(tag: 0x0111, type: 4, count: 1, value: offset)
+    bytes += ifdEntry(tag: 0x0117, type: 4, count: 1, value: length)
+    bytes += le32(0)
+
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString + ".arw")
+    try Data(bytes).write(to: url)
+    return url
+}
+
 /// Writes a synthetic TIFF-like ARW with Sony-style embedded JPEG pointers:
 /// IFD0 preview via StripOffsets/StripByteCounts, IFD1 thumbnail via
 /// JPEGInterchangeFormat/JPEGInterchangeFormatLength, and IFD2 full JPEG via
@@ -440,6 +465,44 @@ struct SonyEmbeddedJPEGLocatorTests {
         let data = SonyMakerNoteParser.readEmbeddedJPEGData(at: location, from: fixture.url)
 
         #expect(data == Data(fixture.preview))
+    }
+
+    @Test
+    func `Embedded JPEG locator rejects out of range preview offset`() throws {
+        let url = try makeSyntheticARWWithPreviewPointer(offset: 4_000, length: 12)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let locations = SonyMakerNoteParser.embeddedJPEGLocations(from: url)
+
+        #expect(locations?.preview == nil)
+        #expect(locations?.thumbnail == nil)
+        #expect(locations?.fullJPEG == nil)
+    }
+
+    @Test
+    func `Embedded JPEG diagnostics reject oversized preview length`() throws {
+        let url = try makeSyntheticARWWithPreviewPointer(offset: 32, length: 129 * 1024 * 1024)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let diagnostics = SonyMakerNoteParser.embeddedJPEGLocationsDiagnostics(from: url)
+
+        #expect(diagnostics.value?.preview == nil)
+        #expect(diagnostics.failure != nil)
+    }
+
+    @Test(arguments: [
+        EmbeddedJPEGLocations.Location(offset: -1, length: 4),
+        EmbeddedJPEGLocations.Location(offset: 1, length: -4),
+        EmbeddedJPEGLocations.Location(offset: 4_000, length: 4),
+        EmbeddedJPEGLocations.Location(offset: 1, length: 129 * 1024 * 1024),
+    ])
+    func `readEmbeddedJPEGData rejects invalid ranges`(location: EmbeddedJPEGLocations.Location) throws {
+        let fixture = try makeSyntheticARWWithEmbeddedJPEGs()
+        defer { try? FileManager.default.removeItem(at: fixture.url) }
+
+        let data = SonyMakerNoteParser.readEmbeddedJPEGData(at: location, from: fixture.url)
+
+        #expect(data == nil)
     }
 
     @Test

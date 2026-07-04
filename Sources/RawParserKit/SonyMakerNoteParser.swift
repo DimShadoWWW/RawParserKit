@@ -27,6 +27,30 @@
 
 import Foundation
 
+private nonisolated func sonyFileSize(for url: URL) -> Int? {
+    guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+          let size = values.fileSize,
+          size >= 0
+    else { return nil }
+    return size
+}
+
+private nonisolated func isValidSonyEmbeddedJPEGLocation(
+    _ location: EmbeddedJPEGLocations.Location,
+    fileSize: Int
+) -> Bool {
+    let maxEmbeddedJPEGLength = 128 * 1024 * 1024
+    guard location.offset > 0,
+          location.length > 0,
+          location.length <= maxEmbeddedJPEGLength,
+          location.offset <= fileSize
+    else { return false }
+
+    let end = location.offset.addingReportingOverflow(location.length)
+    guard !end.overflow else { return false }
+    return end.partialValue <= fileSize
+}
+
 // MARK: - Embedded JPEG locations
 
 /// Absolute file offsets for the three JPEG images embedded in every Sony ARW.
@@ -74,9 +98,9 @@ public enum SonyMakerNoteParser {
         }
 
         // Slow path: IFD0 may fall beyond the 4 MB window (e.g. ILCE-9M3 stores
-        // TIFF metadata in the last 1–2 MB of the file). Re-read the full file.
-        try? fh.seek(toOffset: 0)
-        guard let full = try? fh.read(upToCount: Int.max),
+        // TIFF metadata in the last 1–2 MB of the file). Memory-map the full
+        // file so this fallback does not eagerly copy an entire RAW into RAM.
+        guard let full = mappedFileData(from: url),
               full.count > data.count,
               let result = TIFFParser(data: full)?.parseSonyFocusLocation()
         else { return nil }
@@ -115,8 +139,7 @@ public enum SonyMakerNoteParser {
             trace.append("ERROR: invalid TIFF header in fast-path window")
         }
 
-        try? fh.seek(toOffset: 0)
-        guard let full = try? fh.read(upToCount: Int.max), full.count > data.count else {
+        guard let full = mappedFileData(from: url), full.count > data.count else {
             let failure = "full-file retry unavailable or not larger than fast-path window"
             trace.append("ERROR: \(failure)")
             return .init(value: nil, trace: trace, failure: failure)
@@ -151,7 +174,7 @@ public enum SonyMakerNoteParser {
         guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? fh.close() }
         guard let data = try? fh.read(upToCount: 512 * 1024),
-              let parser = TIFFParser(data: data)
+              let parser = TIFFParser(data: data, fileSize: sonyFileSize(for: url))
         else { return nil }
         let initial = parser.parseEmbeddedJPEGLocations()
 
@@ -160,10 +183,9 @@ public enum SonyMakerNoteParser {
         guard initial.thumbnail == nil, initial.preview == nil, initial.fullJPEG == nil else {
             return initial
         }
-        try? fh.seek(toOffset: 0)
-        guard let full = try? fh.read(upToCount: Int.max),
+        guard let full = mappedFileData(from: url),
               full.count > data.count,
-              let fullParser = TIFFParser(data: full)
+              let fullParser = TIFFParser(data: full, fileSize: full.count)
         else { return initial }
         return fullParser.parseEmbeddedJPEGLocations()
     }
@@ -185,7 +207,7 @@ public enum SonyMakerNoteParser {
         trace.append("trace: opened file")
         trace.append("trace: embedded-JPEG fast-path read bytes=\(data.count)")
 
-        guard let parser = TIFFParser(data: data) else {
+        guard let parser = TIFFParser(data: data, fileSize: sonyFileSize(for: url)) else {
             let failure = "invalid TIFF header in embedded-JPEG fast-path window"
             trace.append("ERROR: \(failure)")
             return .init(value: nil, trace: trace, failure: failure)
@@ -199,8 +221,7 @@ public enum SonyMakerNoteParser {
         }
 
         trace.append("ERROR: fast-path embedded JPEG parse found no JPEG offsets")
-        try? fh.seek(toOffset: 0)
-        guard let full = try? fh.read(upToCount: Int.max), full.count > data.count else {
+        guard let full = mappedFileData(from: url), full.count > data.count else {
             let locations = initial.value ?? .init()
             let failure = "full-file retry unavailable; no JPEG offsets found"
             trace.append("ERROR: \(failure)")
@@ -208,7 +229,7 @@ public enum SonyMakerNoteParser {
         }
         trace.append("trace: embedded-JPEG slow-path full-file read bytes=\(full.count)")
 
-        guard let fullParser = TIFFParser(data: full) else {
+        guard let fullParser = TIFFParser(data: full, fileSize: full.count) else {
             let failure = "invalid TIFF header in embedded-JPEG full-file retry"
             trace.append("ERROR: \(failure)")
             return .init(value: initial.value, trace: trace, failure: failure)
@@ -229,10 +250,18 @@ public enum SonyMakerNoteParser {
         at location: EmbeddedJPEGLocations.Location,
         from url: URL
     ) -> Data? {
+        guard let fileSize = sonyFileSize(for: url),
+              isValidSonyEmbeddedJPEGLocation(location, fileSize: fileSize)
+        else { return nil }
         guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? fh.close() }
         try? fh.seek(toOffset: UInt64(location.offset))
         return try? fh.read(upToCount: location.length)
+    }
+
+    private nonisolated static func mappedFileData(from url: URL) -> Data? {
+        guard let fileSize = sonyFileSize(for: url), fileSize > 0 else { return nil }
+        return try? Data(contentsOf: url, options: .mappedIfSafe)
     }
 }
 
@@ -240,13 +269,15 @@ public enum SonyMakerNoteParser {
 
 private struct TIFFParser {
     let data: Data
+    let fileSize: Int
     let le: Bool
 
-    nonisolated init?(data: Data) {
+    nonisolated init?(data: Data, fileSize: Int? = nil) {
         guard data.count >= 8 else { return nil }
         let b0 = data[0], b1 = data[1]
         if b0 == 0x49, b1 == 0x49 { le = true } else if b0 == 0x4D, b1 == 0x4D { le = false } else { return nil }
         self.data = data
+        self.fileSize = fileSize ?? data.count
     }
 
     nonisolated func parseSonyFocusLocation() -> (width: Int, height: Int, x: Int, y: Int)? {
@@ -454,7 +485,7 @@ private struct TIFFParser {
     private nonisolated func locateJPEG(in ifdOffset: Int, offTag: UInt16, lenTag: UInt16) -> EmbeddedJPEGLocations.Location? {
         guard let offset = subIFDOffset(in: ifdOffset, tag: offTag),
               let length = subIFDOffset(in: ifdOffset, tag: lenTag),
-              offset > 0, length > 0
+              isValidSonyEmbeddedJPEGLocation(.init(offset: offset, length: length), fileSize: fileSize)
         else { return nil }
         return .init(offset: offset, length: length)
     }
