@@ -201,8 +201,11 @@ public actor RawImageLoader {
             let model = stringValue(tiff?[kCGImagePropertyTIFFModel])
             let camera = joined([make, model])
 
-            let fNumber = numberValue(exif?[kCGImagePropertyExifFNumber])
+            let exposureTimeSeconds = positiveNumberValue(exif?[kCGImagePropertyExifExposureTime])
+            let fNumber = positiveNumberValue(exif?[kCGImagePropertyExifFNumber])
+            let focalLengthMM = positiveNumberValue(exif?[kCGImagePropertyExifFocalLength])
             let isoValue = isoNumber(exif?[kCGImagePropertyExifISOSpeedRatings])
+            let exposureCompensationEV = finiteNumberValue(exif?[kCGImagePropertyExifExposureBiasValue])
             let pixelWidth = intValue(properties?[kCGImagePropertyPixelWidth]) ?? intValue(exif?[kCGImagePropertyExifPixelXDimension])
             let pixelHeight = intValue(properties?[kCGImagePropertyPixelHeight]) ?? intValue(exif?[kCGImagePropertyExifPixelYDimension])
             let compression = intValue(tiff?[kCGImagePropertyTIFFCompression])
@@ -214,15 +217,18 @@ public actor RawImageLoader {
             }
 
             let lens = stringValue(exif?[kCGImagePropertyExifLensModel])
-            let exposure = shutterDescription(numberValue(exif?[kCGImagePropertyExifExposureTime]))
+            let exposure = shutterDescription(exposureTimeSeconds)
             let aperture = apertureDescription(fNumber)
-            let focalLength = focalLengthDescription(numberValue(exif?[kCGImagePropertyExifFocalLength]))
+            let focalLength = focalLengthDescription(focalLengthMM)
             let iso = isoDescription(exif?[kCGImagePropertyExifISOSpeedRatings])
             let dateTimeOriginal = stringValue(exif?[kCGImagePropertyExifDateTimeOriginal])
+            let captureTimeZoneOffsetSeconds = captureTimeZoneOffsetSeconds(
+                from: stringValue(exif?[kCGImagePropertyExifOffsetTimeOriginal]),
+            )
             let captureDate = captureDate(
                 from: dateTimeOriginal,
                 subsecond: stringValue(exif?[kCGImagePropertyExifSubsecTimeOriginal]),
-                offset: stringValue(exif?[kCGImagePropertyExifOffsetTimeOriginal]),
+                offset: captureTimeZoneOffsetSeconds,
             )
             let capturedAt = capturedAtDescription(
                 dateTimeOriginal ?? stringValue(tiff?[kCGImagePropertyTIFFDateTime]),
@@ -240,13 +246,17 @@ public actor RawImageLoader {
                 camera: camera,
                 lens: lens,
                 exposure: exposure,
+                exposureTimeSeconds: exposureTimeSeconds,
                 aperture: aperture,
                 apertureValue: fNumber,
                 focalLength: focalLength,
+                focalLengthMM: focalLengthMM,
                 iso: iso,
                 isoValue: isoValue,
+                exposureCompensationEV: exposureCompensationEV,
                 capturedAt: capturedAt,
                 captureDate: captureDate,
+                captureTimeZoneOffsetSeconds: captureTimeZoneOffsetSeconds,
                 dimensions: dimensions,
                 focusPoint: loadedFocusPoint,
                 rawFileType: compression.flatMap { format?.rawFileTypeString(compressionCode: $0) },
@@ -291,6 +301,16 @@ public actor RawImageLoader {
         default:
             nil
         }
+    }
+
+    private nonisolated static func finiteNumberValue(_ value: Any?) -> Double? {
+        guard let value = numberValue(value), value.isFinite else { return nil }
+        return value
+    }
+
+    private nonisolated static func positiveNumberValue(_ value: Any?) -> Double? {
+        guard let value = finiteNumberValue(value), value > 0 else { return nil }
+        return value
     }
 
     private nonisolated static func intValue(_ value: Any?) -> Int? {
@@ -370,12 +390,26 @@ public actor RawImageLoader {
         offset: String?,
         defaultTimeZone: TimeZone = .current,
     ) -> Date? {
+        captureDate(
+            from: dateTimeOriginal,
+            subsecond: subsecond,
+            offset: captureTimeZoneOffsetSeconds(from: offset),
+            defaultTimeZone: defaultTimeZone,
+        )
+    }
+
+    private nonisolated static func captureDate(
+        from dateTimeOriginal: String?,
+        subsecond: String?,
+        offset: Int?,
+        defaultTimeZone: TimeZone = .current,
+    ) -> Date? {
         guard let dateTimeOriginal = stringValue(dateTimeOriginal) else { return nil }
 
         let parser = DateFormatter()
         parser.calendar = Calendar(identifier: .gregorian)
         parser.locale = Locale(identifier: "en_US_POSIX")
-        parser.timeZone = exifTimeZone(from: offset) ?? defaultTimeZone
+        parser.timeZone = offset.flatMap(TimeZone.init(secondsFromGMT:)) ?? defaultTimeZone
         parser.dateFormat = "yyyy:MM:dd HH:mm:ss"
         parser.isLenient = false
 
@@ -392,9 +426,9 @@ public actor RawImageLoader {
         return date
     }
 
-    private nonisolated static func exifTimeZone(from value: String?) -> TimeZone? {
+    nonisolated static func captureTimeZoneOffsetSeconds(from value: String?) -> Int? {
         guard var value = stringValue(value) else { return nil }
-        if value == "Z" { return TimeZone(secondsFromGMT: 0) }
+        if value == "Z" { return 0 }
 
         let sign: Int
         switch value.first {
@@ -418,7 +452,7 @@ public actor RawImageLoader {
         }
 
         guard let hours, let minutes, hours <= 23, minutes <= 59 else { return nil }
-        return TimeZone(secondsFromGMT: sign * ((hours * 60 + minutes) * 60))
+        return sign * ((hours * 60 + minutes) * 60)
     }
 
     private nonisolated static func dimensionsDescription(properties: [CFString: Any], exif: [CFString: Any]?) -> String? {

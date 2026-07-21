@@ -62,6 +62,15 @@ struct CaptureDateTests {
         ) == nil)
     }
 
+    @Test(arguments: [
+        (value: "+02:00", expected: 7_200),
+        (value: "-0530", expected: -19_800),
+        (value: "Z", expected: 0),
+    ])
+    func `capture offset is retained in seconds`(value: String, expected: Int) {
+        #expect(RawImageLoader.captureTimeZoneOffsetSeconds(from: value) == expected)
+    }
+
     private var gmtCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
