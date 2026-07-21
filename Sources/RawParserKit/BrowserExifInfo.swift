@@ -10,6 +10,7 @@ public struct RawImageMetadata: Equatable, Sendable {
     public nonisolated let iso: String?
     public nonisolated let isoValue: Int?
     public nonisolated let capturedAt: String?
+    public nonisolated let captureDate: Date?
     public nonisolated let dimensions: String?
     public nonisolated let focusPoint: RawFocusPoint?
     public nonisolated let rawFileType: String?
@@ -27,6 +28,7 @@ public struct RawImageMetadata: Equatable, Sendable {
         iso: String?,
         isoValue: Int? = nil,
         capturedAt: String?,
+        captureDate: Date? = nil,
         dimensions: String?,
         focusPoint: RawFocusPoint?,
         rawFileType: String? = nil,
@@ -43,6 +45,7 @@ public struct RawImageMetadata: Equatable, Sendable {
         self.iso = iso
         self.isoValue = isoValue
         self.capturedAt = capturedAt
+        self.captureDate = captureDate
         self.dimensions = dimensions
         self.focusPoint = focusPoint
         self.rawFileType = rawFileType

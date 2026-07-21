@@ -218,8 +218,14 @@ public actor RawImageLoader {
             let aperture = apertureDescription(fNumber)
             let focalLength = focalLengthDescription(numberValue(exif?[kCGImagePropertyExifFocalLength]))
             let iso = isoDescription(exif?[kCGImagePropertyExifISOSpeedRatings])
+            let dateTimeOriginal = stringValue(exif?[kCGImagePropertyExifDateTimeOriginal])
+            let captureDate = captureDate(
+                from: dateTimeOriginal,
+                subsecond: stringValue(exif?[kCGImagePropertyExifSubsecTimeOriginal]),
+                offset: stringValue(exif?[kCGImagePropertyExifOffsetTimeOriginal]),
+            )
             let capturedAt = capturedAtDescription(
-                stringValue(exif?[kCGImagePropertyExifDateTimeOriginal]) ?? stringValue(tiff?[kCGImagePropertyTIFFDateTime]),
+                dateTimeOriginal ?? stringValue(tiff?[kCGImagePropertyTIFFDateTime]),
             )
             let dimensions = properties.flatMap { dimensionsDescription(properties: $0, exif: exif) }
             let loadedFocusPoint = makerNoteFocusPoint(from: url) ?? properties.flatMap {
@@ -240,6 +246,7 @@ public actor RawImageLoader {
                 iso: iso,
                 isoValue: isoValue,
                 capturedAt: capturedAt,
+                captureDate: captureDate,
                 dimensions: dimensions,
                 focusPoint: loadedFocusPoint,
                 rawFileType: compression.flatMap { format?.rawFileTypeString(compressionCode: $0) },
@@ -355,6 +362,63 @@ public actor RawImageLoader {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+
+    nonisolated static func captureDate(
+        from dateTimeOriginal: String?,
+        subsecond: String?,
+        offset: String?,
+        defaultTimeZone: TimeZone = .current,
+    ) -> Date? {
+        guard let dateTimeOriginal = stringValue(dateTimeOriginal) else { return nil }
+
+        let parser = DateFormatter()
+        parser.calendar = Calendar(identifier: .gregorian)
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = exifTimeZone(from: offset) ?? defaultTimeZone
+        parser.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        parser.isLenient = false
+
+        guard var date = parser.date(from: dateTimeOriginal) else { return nil }
+        guard let subsecond = stringValue(subsecond) else { return date }
+
+        let digits = subsecond
+            .drop(while: { $0 == "." })
+            .prefix(while: \Character.isNumber)
+        if !digits.isEmpty,
+           let fraction = TimeInterval("0.\(digits)") {
+            date.addTimeInterval(fraction)
+        }
+        return date
+    }
+
+    private nonisolated static func exifTimeZone(from value: String?) -> TimeZone? {
+        guard var value = stringValue(value) else { return nil }
+        if value == "Z" { return TimeZone(secondsFromGMT: 0) }
+
+        let sign: Int
+        switch value.first {
+        case "+": sign = 1
+        case "-": sign = -1
+        default: return nil
+        }
+        value.removeFirst()
+
+        let components = value.split(separator: ":", omittingEmptySubsequences: false)
+        let hours: Int?
+        let minutes: Int?
+        if components.count == 2 {
+            hours = Int(components[0])
+            minutes = Int(components[1])
+        } else if value.count == 4 {
+            hours = Int(value.prefix(2))
+            minutes = Int(value.suffix(2))
+        } else {
+            return nil
+        }
+
+        guard let hours, let minutes, hours <= 23, minutes <= 59 else { return nil }
+        return TimeZone(secondsFromGMT: sign * ((hours * 60 + minutes) * 60))
     }
 
     private nonisolated static func dimensionsDescription(properties: [CFString: Any], exif: [CFString: Any]?) -> String? {
