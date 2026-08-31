@@ -51,8 +51,9 @@ public enum DNGRawFormat: RawFormat {
         case 1: "Uncompressed"
         case 7: "JPEG" // DNG spec uses 7 for JPEG compression
         case 8: "Deflate" // Adobe Deflate (lossless)
+        case 32773: "PackBits" // PackBits (TIFF standard value)
         case 34892: "Lossy DNG" // Lossy DNG compression
-        case 34713: "PackBits" // PackBits (rare in DNG)
+        case 52546: "JPEG XL" // DNG 1.7+ JPEG XL
         default: "Unknown (\(compressionCode))"
         }
     }

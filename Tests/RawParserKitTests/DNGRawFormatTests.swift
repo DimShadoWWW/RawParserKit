@@ -34,6 +34,22 @@ struct DNGRawFormatTests {
     }
 
     @Test
+    func `compression code 32773 is PackBits (correct TIFF value)`() {
+        #expect(DNGRawFormat.rawFileTypeString(compressionCode: 32773) == "PackBits")
+    }
+
+    @Test
+    func `compression code 52546 is JPEG XL (DNG 1.7)`() {
+        #expect(DNGRawFormat.rawFileTypeString(compressionCode: 52546) == "JPEG XL")
+    }
+
+    @Test
+    func `old incorrect PackBits value 34713 is now unknown`() {
+        // The old incorrect value should now be treated as unknown
+        #expect(DNGRawFormat.rawFileTypeString(compressionCode: 34713) == "Unknown (34713)")
+    }
+
+    @Test
     func `unknown compression code preserves numeric value`() {
         #expect(DNGRawFormat.rawFileTypeString(compressionCode: 99999) == "Unknown (99999)")
     }
