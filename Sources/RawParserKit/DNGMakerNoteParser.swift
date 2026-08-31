@@ -141,8 +141,8 @@ public enum DNGMakerNoteParser {
         else { return nil }
         let initial = parser.parseEmbeddedJPEGLocations()
 
-        // If nothing found, IFD0 may fall beyond the 512 KB window.
-        guard initial.thumbnail == nil, initial.preview == nil, initial.fullJPEG == nil else {
+        // If fullJPEG was found, we have what we need. Otherwise, IFD0/SubIFDs may fall beyond the 512 KB window.
+        guard initial.fullJPEG == nil else {
             return initial
         }
         guard let full = mappedFileData(from: url),
@@ -176,12 +176,11 @@ public enum DNGMakerNoteParser {
 
         let initial = parser.parseEmbeddedJPEGLocationsDiagnostic()
         trace.append(contentsOf: initial.trace)
-        if let locations = initial.value,
-           locations.thumbnail != nil || locations.preview != nil || locations.fullJPEG != nil {
+        if let locations = initial.value, locations.fullJPEG != nil {
             return .init(value: locations, trace: trace, failure: nil)
         }
 
-        trace.append("ERROR: fast-path embedded JPEG parse found no JPEG offsets")
+        trace.append("ERROR: fast-path embedded JPEG parse found no full-resolution JPEG")
         guard let full = mappedFileData(from: url), full.count > data.count else {
             let locations = initial.value ?? .init()
             let failure = "full-file retry unavailable; no JPEG offsets found"
@@ -388,22 +387,22 @@ private struct DNGTIFFParser {
         let preview: Loc? = locateJPEG(in: ifd0, offTag: 0x0111, lenTag: 0x0117)
             ?? locateJPEG(in: ifd0, offTag: 0x0201, lenTag: 0x0202)
 
+        // SubIFDs via tag 0x014A — may contain full-res JPEG (check before IFD1)
+        let subIFDFullJPEG = subIFDOffsets(in: ifd0, tag: 0x014A)
+            .compactMap { locateJPEG(in: $0, offTag: 0x0201, lenTag: 0x0202) }
+            .max { $0.length < $1.length }
+
         // Walk IFD chain: IFD0 → IFD1
-        guard ifd0 + 2 <= data.count else { return .init(preview: preview) }
+        guard ifd0 + 2 <= data.count else { return .init(preview: preview, fullJPEG: subIFDFullJPEG) }
         let ifd0Count = Int(readU16(at: ifd0))
         let ifd1Ptr = ifd0 + 2 + ifd0Count * 12
         guard let ifd1Raw = readU32(at: ifd1Ptr), ifd1Raw > 0 else {
-            return .init(preview: preview)
+            return .init(preview: preview, fullJPEG: subIFDFullJPEG)
         }
         let ifd1 = Int(ifd1Raw)
 
         // IFD1: tiny thumbnail via JPEGInterchangeFormat (0x0201) + Length (0x0202)
         let thumbnail: Loc? = locateJPEG(in: ifd1, offTag: 0x0201, lenTag: 0x0202)
-
-        // SubIFDs via tag 0x014A — may contain full-res JPEG
-        let subIFDFullJPEG = subIFDOffsets(in: ifd0, tag: 0x014A)
-            .compactMap { locateJPEG(in: $0, offTag: 0x0201, lenTag: 0x0202) }
-            .max { $0.length < $1.length }
 
         // Walk IFD chain: IFD1 → IFD2 (rare in DNG, but possible)
         guard ifd1 + 2 <= data.count else {
@@ -436,11 +435,19 @@ private struct DNGTIFFParser {
             ?? locateJPEG(in: ifd0, offTag: 0x0201, lenTag: 0x0202)
         trace.append(preview == nil ? "trace: IFD0 preview JPEG tags not found" : "trace: IFD0 preview JPEG found")
 
+        // SubIFDs via tag 0x014A — may contain full-res JPEG (check before IFD1)
+        let subIFDs = subIFDOffsets(in: ifd0, tag: 0x014A)
+        trace.append("trace: IFD0 SubIFD tag 0x014A offsets count=\(subIFDs.count)")
+        let subIFDFullJPEG = subIFDs
+            .compactMap { locateJPEG(in: $0, offTag: 0x0201, lenTag: 0x0202) }
+            .max { $0.length < $1.length }
+        trace.append(subIFDFullJPEG == nil ? "trace: SubIFD full JPEG not found" : "trace: SubIFD full JPEG found")
+
         let ifd0Count = Int(readU16(at: ifd0))
         let ifd1Ptr = ifd0 + 2 + ifd0Count * 12
         guard let ifd1Raw = readU32(at: ifd1Ptr), ifd1Raw > 0 else {
-            let locations = DNGEmbeddedJPEGLocations(preview: preview)
-            let failure = preview == nil ? "IFD1 pointer missing and no preview JPEG found" : nil
+            let locations = DNGEmbeddedJPEGLocations(preview: preview, fullJPEG: subIFDFullJPEG)
+            let failure = preview == nil && subIFDFullJPEG == nil ? "IFD1 pointer missing and no JPEG offsets found" : nil
             if let failure { trace.append("ERROR: \(failure)") }
             return .init(value: locations, trace: trace, failure: failure)
         }
@@ -449,13 +456,6 @@ private struct DNGTIFFParser {
 
         let thumbnail = locateJPEG(in: ifd1, offTag: 0x0201, lenTag: 0x0202)
         trace.append(thumbnail == nil ? "trace: IFD1 thumbnail JPEG tags not found" : "trace: IFD1 thumbnail JPEG found")
-
-        let subIFDs = subIFDOffsets(in: ifd0, tag: 0x014A)
-        trace.append("trace: IFD0 SubIFD tag 0x014A offsets count=\(subIFDs.count)")
-        let subIFDFullJPEG = subIFDs
-            .compactMap { locateJPEG(in: $0, offTag: 0x0201, lenTag: 0x0202) }
-            .max { $0.length < $1.length }
-        trace.append(subIFDFullJPEG == nil ? "trace: SubIFD full JPEG not found" : "trace: SubIFD full JPEG found")
 
         let ifd1Count = Int(readU16(at: ifd1))
         let ifd2Ptr = ifd1 + 2 + ifd1Count * 12
@@ -476,7 +476,7 @@ private struct DNGTIFFParser {
         let locations = DNGEmbeddedJPEGLocations(thumbnail: thumbnail, preview: preview, fullJPEG: fullJPEG)
         let failure = locations.thumbnail == nil && locations.preview == nil && locations.fullJPEG == nil ? "no JPEG offsets found" : nil
         if let failure { trace.append("ERROR: \(failure)") }
-        return .init(value: locations, trace: trace, failure: failure)
+        return .init(value: locations, trace: trace, failure: nil)
     }
 
     // MARK: Binary helpers
@@ -490,15 +490,60 @@ private struct DNGTIFFParser {
     }
 
     private nonisolated func subIFDOffset(in ifdOffset: Int, tag: UInt16) -> Int? {
-        guard let (valLoc, _) = tagDataRange(in: ifdOffset, tag: tag) else { return nil }
-        return readU32(at: valLoc).map(Int.init)
+        guard let (valLoc, byteCount) = tagDataRange(in: ifdOffset, tag: tag) else { return nil }
+        // Read the actual type to decode the value correctly
+        guard ifdOffset + 2 <= data.count else { return nil }
+        let entryCount = Int(readU16(at: ifdOffset))
+        for i in 0 ..< entryCount {
+            let e = ifdOffset + 2 + i * 12
+            guard e + 12 <= data.count else { break }
+            if readU16(at: e) == tag {
+                let type = Int(readU16(at: e + 2))
+                let count = Int(readU32(at: e + 4) ?? 0)
+                return readValue(at: valLoc, type: type, count: count, byteCount: byteCount).map(Int.init)
+            }
+        }
+        return nil
     }
 
     private nonisolated func subIFDOffsets(in ifdOffset: Int, tag: UInt16) -> [Int] {
         guard let (valLoc, byteCount) = tagDataRange(in: ifdOffset, tag: tag),
-              byteCount >= 4 else { return [] }
-        return stride(from: 0, to: byteCount, by: 4).compactMap { offset in
-            readU32(at: valLoc + offset).map(Int.init)
+              byteCount >= 2 else { return [] }
+        // Read the actual type to decode the values correctly
+        guard ifdOffset + 2 <= data.count else { return [] }
+        let entryCount = Int(readU16(at: ifdOffset))
+        for i in 0 ..< entryCount {
+            let e = ifdOffset + 2 + i * 12
+            guard e + 12 <= data.count else { break }
+            if readU16(at: e) == tag {
+                let type = Int(readU16(at: e + 2))
+                let count = Int(readU32(at: e + 4) ?? 0)
+                let sizes = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8, 4]
+                let elementSize = type < sizes.count ? sizes[type] : 1
+                return stride(from: 0, to: byteCount, by: elementSize).compactMap { offset in
+                    readValue(at: valLoc + offset, type: type, count: 1, byteCount: elementSize).map(Int.init)
+                }
+            }
+        }
+        return []
+    }
+
+    private nonisolated func readValue(at offset: Int, type: Int, count: Int, byteCount: Int) -> UInt32? {
+        guard offset + byteCount <= data.count else { return nil }
+        // TIFF types: 1=BYTE, 2=ASCII, 3=SHORT, 4=LONG, 5=RATIONAL, 7=UNDEFINED, 9=SLONG, etc.
+        switch type {
+        case 3: // SHORT (2 bytes)
+            guard byteCount >= 2 else { return nil }
+            return UInt32(readU16(at: offset))
+        case 4: // LONG (4 bytes)
+            guard byteCount >= 4 else { return nil }
+            return readU32(at: offset)
+        default:
+            // For other types, try reading as U32 if we have enough bytes
+            if byteCount >= 4 {
+                return readU32(at: offset)
+            }
+            return nil
         }
     }
 
